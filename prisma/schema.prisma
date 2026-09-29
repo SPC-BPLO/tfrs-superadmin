@@ -1,0 +1,223 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Office {
+  id        String   @id @default(cuid())
+  code      String   @unique
+  name      String
+  active    Boolean  @default(true)
+  users     User[]
+  auditLogs AuditLog[]
+  createdAt DateTime @default(now())
+}
+
+model User {
+  id           String   @id @default(cuid())
+  name         String
+  username     String   @unique
+  email        String   @unique
+  passwordHash String
+  status       String   @default("ACTIVE")
+  lastLogin    DateTime?
+  officeId     String
+  office       Office   @relation(fields: [officeId], references: [id])
+  roleId       String
+  role         Role     @relation(fields: [roleId], references: [id])
+  auditLogs    AuditLog[]
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+model Role {
+  id          String           @id @default(cuid())
+  name        String           @unique
+  description String?
+  officeScope String           @default("ALL")
+  active      Boolean          @default(true)
+  users       User[]
+  permissions RolePermission[]
+  createdAt   DateTime         @default(now())
+}
+
+model Permission {
+  id          String           @id @default(cuid())
+  code        String           @unique
+  label       String
+  category    String
+  roles       RolePermission[]
+}
+
+model RolePermission {
+  roleId       String
+  permissionId String
+  role         Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permission   Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+  @@id([roleId, permissionId])
+}
+
+model Client {
+  id          String      @id @default(cuid())
+  firstName   String
+  lastName    String
+  address     String
+  contact     String
+  email       String?
+  franchises Franchise[]
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+}
+
+model Toda {
+  id         String      @id @default(cuid())
+  code       String      @unique
+  name       String
+  route      String
+  franchises Franchise[]
+}
+
+model Franchise {
+  id          String      @id @default(cuid())
+  mtopNumber  String      @unique
+  clientId    String
+  client      Client      @relation(fields: [clientId], references: [id])
+  todaId      String
+  toda        Toda        @relation(fields: [todaId], references: [id])
+  status      String      @default("ACTIVE")
+  expiryDate  DateTime
+  owners      Owner[]
+  drivers     Driver[]
+  vehicles    Vehicle[]
+  violations Violation[]
+  renewals    Renewal[]
+  transfers   Transfer[]
+  payments    Payment[]
+  archives    Archive[]
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+}
+
+model Owner {
+  id          String    @id @default(cuid())
+  franchiseId String
+  franchise   Franchise @relation(fields: [franchiseId], references: [id], onDelete: Cascade)
+  name        String
+  contact     String?
+  active      Boolean   @default(true)
+  createdAt   DateTime  @default(now())
+}
+
+model Driver {
+  id            String    @id @default(cuid())
+  franchiseId   String
+  franchise     Franchise @relation(fields: [franchiseId], references: [id], onDelete: Cascade)
+  name          String
+  licenseNumber String
+  active        Boolean   @default(true)
+  createdAt     DateTime  @default(now())
+}
+
+model Vehicle {
+  id          String    @id @default(cuid())
+  franchiseId String
+  franchise   Franchise @relation(fields: [franchiseId], references: [id], onDelete: Cascade)
+  plateNumber String    @unique
+  makeModel   String
+  vehicleType String    @default("TRICYCLE")
+  color       String?
+  active      Boolean   @default(true)
+}
+
+model Violation {
+  id                 String    @id @default(cuid())
+  ticketNumber       String    @unique
+  franchiseId        String?
+  franchise          Franchise? @relation(fields: [franchiseId], references: [id])
+  violatorName       String
+  apprehendingOfficer String
+  apprehensionDate   DateTime
+  driverLicense      String
+  address            String
+  vehicleType        String
+  plateNumber        String
+  violationType      String
+  amountDue          Float
+  status             String    @default("UNSETTLED")
+  payments           Payment[]
+  createdAt          DateTime  @default(now())
+}
+
+model Payment {
+  id          String     @id @default(cuid())
+  franchiseId String?
+  franchise   Franchise? @relation(fields: [franchiseId], references: [id])
+  violationId String?
+  violation   Violation? @relation(fields: [violationId], references: [id])
+  payor       String
+  amountDue   Float
+  amountPaid  Float
+  orNumber    String     @unique
+  status      String     @default("PAID")
+  paidAt      DateTime   @default(now())
+}
+
+model Renewal {
+  id          String    @id @default(cuid())
+  franchiseId String
+  franchise   Franchise @relation(fields: [franchiseId], references: [id])
+  previousExpiry DateTime
+  newExpiry   DateTime?
+  status      String    @default("PENDING")
+  processedAt DateTime  @default(now())
+}
+
+model Transfer {
+  id            String    @id @default(cuid())
+  franchiseId   String
+  franchise     Franchise @relation(fields: [franchiseId], references: [id])
+  previousOwner String
+  newOwner      String
+  changeType    String
+  referenceNo   String    @unique
+  status        String    @default("COMPLETED")
+  processedAt   DateTime  @default(now())
+}
+
+model Archive {
+  id             String    @id @default(cuid())
+  franchiseId    String?
+  franchise      Franchise? @relation(fields: [franchiseId], references: [id])
+  mtopNumber     String
+  transactionType String
+  referenceNo    String
+  snapshotJson   String
+  processedAt    DateTime  @default(now())
+}
+
+model AuditLog {
+  id          String   @id @default(cuid())
+  userId      String?
+  user        User?    @relation(fields: [userId], references: [id])
+  officeId    String?
+  office      Office?  @relation(fields: [officeId], references: [id])
+  roleName    String
+  action      String
+  module      String
+  recordId    String?
+  description String
+  ipAddress   String?
+  createdAt   DateTime @default(now())
+}
+
+model SystemSetting {
+  id        String   @id @default(cuid())
+  key       String   @unique
+  value     String
+  group     String
+  updatedAt DateTime @updatedAt
+}

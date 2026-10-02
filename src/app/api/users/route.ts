@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { verifySession } from "@/lib/auth";
 import { ensureSystemUsers, userDb } from "@/lib/user-db";
+import { sendAccountApprovedEmail } from "@/lib/account-email";
 
 async function admin(){return verifySession((await cookies()).get("tfrs_session")?.value)}
 const schema=z.object({id:z.coerce.number().int().positive(),action:z.enum(["SAVE","APPROVE","DISABLE","ACTIVATE","REJECT","RESET_DEVICES","APPROVE_PASSWORD","FINALIZE_PASSWORD","REJECT_PASSWORD"]),office:z.enum(["CTMO","FINANCE","BOTH"]).optional(),role:z.string().trim().min(2).max(80).optional(),requestId:z.preprocess(value=>value===null||value===""?undefined:value,z.coerce.number().int().positive().optional())});
@@ -33,12 +34,22 @@ export async function PATCH(req:Request){
     let result;
     if(input.action==="APPROVE"||input.action==="SAVE"){
       if(!input.office||!input.role)return NextResponse.json({error:"Office and role are required."},{status:400});
-      result=await userDb.query(`UPDATE system_users SET approved_office=$1,role=$2,status=CASE WHEN $3='APPROVE' THEN 'ACTIVE' ELSE status END,approved_at=CASE WHEN $3='APPROVE' THEN NOW() ELSE approved_at END,approved_by=CASE WHEN $3='APPROVE' THEN $4 ELSE approved_by END,updated_at=NOW() WHERE id=$5 RETURNING id`,[input.office,input.role,input.action,a.email,input.id]);
+      result=await userDb.query(`UPDATE system_users SET approved_office=$1,role=$2,status=CASE WHEN $3='APPROVE' THEN 'ACTIVE' ELSE status END,approved_at=CASE WHEN $3='APPROVE' THEN NOW() ELSE approved_at END,approved_by=CASE WHEN $3='APPROVE' THEN $4 ELSE approved_by END,updated_at=NOW() WHERE id=$5 RETURNING id,full_name,email,approved_office,role`,[input.office,input.role,input.action,a.email,input.id]);
     }else{
       const statuses:Record<string,string>={DISABLE:"DISABLED",ACTIVATE:"ACTIVE",REJECT:"REJECTED"};
       result=await userDb.query(`UPDATE system_users SET status=$1,updated_at=NOW() WHERE id=$2 RETURNING id`,[statuses[input.action],input.id]);
     }
     if(!result.rowCount)return NextResponse.json({error:"User account was not found."},{status:404});
+    if(input.action==="APPROVE"){
+      const approved=result.rows[0];
+      try{
+        await sendAccountApprovedEmail({email:approved.email,fullName:approved.full_name,office:approved.approved_office,role:approved.role});
+        return NextResponse.json({ok:true,message:"Account approved and notification email sent."})
+      }catch(emailError){
+        console.error("Account approved but notification email failed",emailError);
+        return NextResponse.json({ok:true,message:"Account approved, but the notification email could not be sent.",emailWarning:true})
+      }
+    }
     return NextResponse.json({ok:true,message:"User settings saved."})
   }catch(error){console.error("User management update failed",error);return NextResponse.json({error:"The user update could not be saved."},{status:400})}
 }

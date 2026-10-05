@@ -1,8 +1,8 @@
 import { Pool } from "pg";
 const globalUsers = globalThis as unknown as { tfrsUsersPool?: Pool };
 function config(){
-  if(process.env.NODE_ENV === "production" && process.env.DATABASE_URL) return {connectionString:process.env.DATABASE_URL,ssl:process.env.DATABASE_SSL==="true"?{rejectUnauthorized:false}:undefined};
   if(process.env.USER_DATABASE_URL) return {connectionString:process.env.USER_DATABASE_URL,ssl:process.env.USER_DATABASE_SSL==="true"?{rejectUnauthorized:false}:undefined};
+  if(process.env.NODE_ENV === "production" && process.env.DATABASE_URL) return {connectionString:process.env.DATABASE_URL,ssl:process.env.DATABASE_SSL==="true"?{rejectUnauthorized:false}:undefined};
   return {host:process.env.DB_HOST||"127.0.0.1",port:Number(process.env.DB_PORT||5432),user:process.env.DB_USER||"postgres",password:process.env.DB_PASSWORD||"postgres",database:process.env.DB_NAME||"spc_government_systems"};
 }
 export const userDb=globalUsers.tfrsUsersPool??new Pool({...config(),max:5});

@@ -1,3 +1,4 @@
+import {userDb} from '@/lib/user-db';
 import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 import { verifySession } from "@/lib/auth";
@@ -34,7 +35,11 @@ export async function GET() {
     const violationRows = violations.map((r) => ({ ticket:r.ticket, violator:r.violator_name, officer:r.officer, date:r.apprehension_date, license:r.license_no, address:r.address, vehicle:r.vehicle, plate:r.plate_no, mtop:r.franchise_no||"—", violation:r.violations_committed, amount:money(r.amount), amountValue:Number(r.amount), status:r.status, or:r.or_number||"—", payor:r.payor||r.violator_name, paymentDate:r.payment_date||"—", createdAt:r.created_at }));
     const renewalRows = renewals.map((r) => ({ mtop:r.mtop, client:r.client_name, toda:r.toda, driver:r.driver_name, plate:r.plate_no, expiry:date(r.current_expiry), status:r.status, date:date(r.renewal_date), reference:r.reference_no||"—", renewalDate:r.renewal_date, createdAt:r.created_at }));
     const payments = violationRows.filter((r) => r.status === "Settled").map((r) => ({ ticket:r.ticket, payor:r.payor, violation:r.violation, due:r.amount, paid:r.amount, or:r.or, status:"Paid", date:r.paymentDate }));
-    const auditRows = audits.map((r) => ({ time:date(r.created_at), createdAt:r.created_at, user:r.actor, office:r.entity_type, role:"System user", action:r.action, module:r.entity_type, record:r.entity_id||"—", description:r.description, ip:"—" }));
+    let accessLogs:Record<string,unknown>[]=[];
+    try{accessLogs=(await userDb.query('SELECT * FROM account_access_logs ORDER BY created_at DESC LIMIT 250')).rows;}
+    catch(error){if((error as {code?:string}).code!=='42P01')throw error;}
+    const accessRows=accessLogs.map(r=>({time:new Intl.DateTimeFormat('en-PH',{dateStyle:'medium',timeStyle:'medium',timeZone:'Asia/Manila'}).format(new Date(String(r.created_at))),createdAt:r.created_at,user:String(r.user_name),office:String(r.office),role:String(r.role),action:String(r.action),module:'Account access',record:r.user_id,description:'Successful login • '+r.browser+' • '+r.device_name,ip:String(r.ip_address||'Local / unavailable')}));
+    const auditRows = audits.map((r) => ({ time:date(r.created_at), createdAt:r.created_at, user:r.actor, office:r.entity_type, role:"System user", action:r.action, module:r.entity_type, record:r.entity_id||"—", description:r.description, ip:"—" })).concat(accessRows).sort((a,b)=>new Date(String(b.createdAt)).getTime()-new Date(String(a.createdAt)).getTime()).slice(0,250);
     const transfers = transactions.filter((r) => String(r.transaction_type).toLowerCase().includes("transfer")).map((r) => ({
       mtop:r.mtop, previous:r.operator_name, newOwner:r.operator_name, change:r.transaction_type,
       date:date(r.processed_at), reference:r.reference_no, status:r.status,
